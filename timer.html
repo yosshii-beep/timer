@@ -171,6 +171,20 @@
   let running = false;
   let finished = false;
 
+  // AudioContext をユーザー操作時に初期化（ブラウザの自動再生制限を回避）
+  var audioCtx = null;
+
+  function getAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // suspended 状態の場合は resume する
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
   const inputArea = document.getElementById('inputArea');
   const display   = document.getElementById('display');
   const doneMsg   = document.getElementById('doneMsg');
@@ -180,19 +194,22 @@
   function pad(n) { return String(n).padStart(2, '0'); }
 
   function formatTime(sec) {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
+    var h = Math.floor(sec / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var s = sec % 60;
     return pad(h) + ':' + pad(m) + ':' + pad(s);
   }
 
   function handleMain() {
+    // ボタンクリック時に AudioContext を初期化（ユーザー操作のタイミングで行う）
+    getAudioCtx();
+
     if (finished) return;
     if (!running) {
       if (remaining === 0) {
-        const h = parseInt(document.getElementById('inputH').value) || 0;
-        const m = parseInt(document.getElementById('inputM').value) || 0;
-        const s = parseInt(document.getElementById('inputS').value) || 0;
+        var h = parseInt(document.getElementById('inputH').value) || 0;
+        var m = parseInt(document.getElementById('inputM').value) || 0;
+        var s = parseInt(document.getElementById('inputS').value) || 0;
         remaining = h * 3600 + m * 60 + s;
         if (remaining <= 0) { alert('時間を入力してください'); return; }
       }
@@ -261,7 +278,7 @@
 
   function playBeep() {
     try {
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var ctx = getAudioCtx();
       [0, 0.35, 0.7].forEach(function(delay) {
         var osc = ctx.createOscillator();
         var gain = ctx.createGain();
@@ -274,7 +291,9 @@
         osc.start(ctx.currentTime + delay);
         osc.stop(ctx.currentTime + delay + 0.35);
       });
-    } catch(e) {}
+    } catch(e) {
+      console.warn('beep error:', e);
+    }
   }
 
   ['inputH','inputM','inputS'].forEach(function(id) {
