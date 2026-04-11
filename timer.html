@@ -37,49 +37,76 @@
       color: #888;
     }
 
-    .time-inputs {
+    .input-area {
+      width: 100%;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 16px;
     }
 
-    .time-inputs input {
-      width: 64px;
-      text-align: center;
-      font-size: 36px;
-      font-weight: 300;
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 4px;
+      width: 100%;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 0;
       border: none;
-      border-bottom: 2px solid #444;
-      outline: none;
+      border-radius: 8px;
       background: transparent;
-      color: #fff;
-      padding: 4px 0;
-      transition: border-color 0.2s;
-    }
-    .time-inputs input:focus {
-      border-bottom-color: #fff;
-    }
-    .time-inputs .sep {
-      font-size: 32px;
-      font-weight: 300;
-      color: #555;
-      margin-bottom: 4px;
-    }
-
-    .input-labels {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 6px;
-    }
-    .input-labels span {
-      width: 64px;
-      text-align: center;
-      font-size: 11px;
       color: #666;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
       letter-spacing: 0.06em;
     }
-    .input-labels .spacer { width: 24px; }
+    .tab.active {
+      background: #333;
+      color: #fff;
+    }
+
+    .select-wrap {
+      position: relative;
+      width: 100%;
+    }
+
+    select {
+      width: 100%;
+      padding: 16px 44px 16px 20px;
+      border: 2px solid #2a2a2a;
+      border-radius: 12px;
+      background: #1a1a1a;
+      color: #fff;
+      font-size: 32px;
+      font-weight: 300;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    select option {
+      background: #1a1a1a;
+      color: #fff;
+      font-size: 18px;
+    }
+
+    .select-arrow {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #555;
+      pointer-events: none;
+      font-size: 18px;
+    }
 
     .display {
       display: none;
@@ -109,11 +136,12 @@
     }
     button:active { transform: scale(0.97); }
 
-    .btn-start {
+    .btn-pause {
       background: #fff;
       color: #000;
     }
-    .btn-start:hover { background: #ddd; }
+    .btn-pause:hover { background: #ddd; }
+    .btn-pause:disabled { opacity: 0.4; cursor: default; transform: none; }
 
     .btn-reset {
       background: #222;
@@ -139,110 +167,118 @@
 <div class="card">
   <h1>Timer</h1>
 
-  <div id="inputArea">
-    <div class="time-inputs">
-      <input type="number" id="inputH" min="0" max="23" value="0" />
-      <span class="sep">:</span>
-      <input type="number" id="inputM" min="0" max="59" value="5" />
-      <span class="sep">:</span>
-      <input type="number" id="inputS" min="0" max="59" value="0" />
+  <div class="input-area" id="inputArea">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab(this,'sec')">秒</button>
+      <button class="tab" onclick="switchTab(this,'min')">分</button>
+      <button class="tab" onclick="switchTab(this,'5min')">5分</button>
     </div>
-    <div class="input-labels">
-      <span>時間</span>
-      <span class="spacer"></span>
-      <span>分</span>
-      <span class="spacer"></span>
-      <span>秒</span>
+    <div class="select-wrap">
+      <select id="timeSelect" onchange="onSelectChange()">
+        <option value="" disabled selected>選択してください</option>
+      </select>
+      <span class="select-arrow">▾</span>
     </div>
   </div>
 
-  <div class="display" id="display">00:05:00</div>
+  <div class="display" id="display">0:00</div>
   <div class="done-msg" id="doneMsg">時間になりました！</div>
 
-  <div class="buttons">
-    <button class="btn-start" id="mainBtn" onclick="handleMain()">開始</button>
-    <button class="btn-reset" id="resetBtn" onclick="handleReset()" style="display:none">リセット</button>
+  <div class="buttons" id="btnArea" style="display:none">
+    <button class="btn-pause" id="pauseBtn" onclick="handlePause()">一時停止</button>
+    <button class="btn-reset" onclick="handleReset()">リセット</button>
   </div>
 </div>
 
 <script>
   var audioCtx = null;
   var audioUnlocked = false;
+  var alarmNodes = [];
+  var alarmEndTimeout = null;
 
-  // iOSを含むすべてのブラウザで音声を解除する
-  // ユーザーのタッチ/クリック時に無音バッファを再生して制限を解除
   function unlockAudio() {
     if (audioUnlocked) return;
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-      // 無音の1サンプルバッファを再生してiOSの制限を解除
-      var silentBuffer = audioCtx.createBuffer(1, 1, 22050);
-      var source = audioCtx.createBufferSource();
-      source.buffer = silentBuffer;
-      source.connect(audioCtx.destination);
-      source.start(0);
-
-      // suspendedの場合はresumeする
+      var buf = audioCtx.createBuffer(1, 1, 22050);
+      var src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioCtx.destination);
+      src.start(0);
       if (audioCtx.state === 'suspended') {
-        audioCtx.resume().then(function() {
-          audioUnlocked = true;
-        });
+        audioCtx.resume().then(function() { audioUnlocked = true; });
       } else {
         audioUnlocked = true;
       }
-    } catch(e) {
-      console.warn('audio unlock error:', e);
-    }
+    } catch(e) {}
   }
 
-  let remaining = 0;
-  let intervalId = null;
-  let running = false;
-  let finished = false;
+  var remaining = 0;
+  var initialTime = 0;
+  var intervalId = null;
+  var running = false;
 
-  const inputArea = document.getElementById('inputArea');
-  const display   = document.getElementById('display');
-  const doneMsg   = document.getElementById('doneMsg');
-  const mainBtn   = document.getElementById('mainBtn');
-  const resetBtn  = document.getElementById('resetBtn');
-
-  function pad(n) { return String(n).padStart(2, '0'); }
+  var display   = document.getElementById('display');
+  var doneMsg   = document.getElementById('doneMsg');
+  var btnArea   = document.getElementById('btnArea');
+  var pauseBtn  = document.getElementById('pauseBtn');
+  var inputArea = document.getElementById('inputArea');
 
   function formatTime(sec) {
     var h = Math.floor(sec / 3600);
     var m = Math.floor((sec % 3600) / 60);
     var s = sec % 60;
-    return pad(h) + ':' + pad(m) + ':' + pad(s);
+    var ss = String(s).padStart(2, '0');
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + ss;
+    return m + ':' + ss;
   }
 
-  function handleMain() {
-    // ボタンクリック時（ユーザー操作のタイミング）に音声を解除
-    unlockAudio();
+  function switchTab(el, tab) {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    el.classList.add('active');
+    populateSelect(tab);
+  }
 
-    if (finished) return;
-    if (!running) {
-      if (remaining === 0) {
-        var h = parseInt(document.getElementById('inputH').value) || 0;
-        var m = parseInt(document.getElementById('inputM').value) || 0;
-        var s = parseInt(document.getElementById('inputS').value) || 0;
-        remaining = h * 3600 + m * 60 + s;
-        if (remaining <= 0) { alert('時間を入力してください'); return; }
-      }
-      startTimer();
+  function populateSelect(tab) {
+    var select = document.getElementById('timeSelect');
+    select.innerHTML = '<option value="" disabled selected>選択してください</option>';
+    var seconds = [];
+    if (tab === 'sec') {
+      for (var s = 10; s <= 50; s += 10) seconds.push(s);
+    } else if (tab === 'min') {
+      for (var m = 1; m <= 60; m++) seconds.push(m * 60);
     } else {
-      pauseTimer();
+      for (var f = 5; f <= 60; f += 5) seconds.push(f * 60);
     }
+    seconds.forEach(function(s) {
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = formatTime(s);
+      select.appendChild(opt);
+    });
+  }
+
+  function onSelectChange() {
+    unlockAudio();
+    var val = parseInt(document.getElementById('timeSelect').value);
+    if (!val) return;
+    stopAlarm();
+    clearInterval(intervalId);
+    remaining = val;
+    initialTime = val;
+    startTimer();
   }
 
   function startTimer() {
+    clearInterval(intervalId);
     running = true;
-    mainBtn.textContent = '一時停止';
     inputArea.style.display = 'none';
     doneMsg.style.display   = 'none';
     display.style.display   = 'block';
     display.classList.remove('warning');
-    resetBtn.style.display  = 'inline-block';
+    btnArea.style.display   = 'flex';
+    pauseBtn.textContent    = '一時停止';
+    pauseBtn.disabled       = false;
     updateDisplay();
 
     intervalId = setInterval(function() {
@@ -252,79 +288,110 @@
     }, 1000);
   }
 
-  function pauseTimer() {
-    clearInterval(intervalId);
-    running = false;
-    mainBtn.textContent = '再開';
+  function handlePause() {
+    if (running) {
+      clearInterval(intervalId);
+      running = false;
+      pauseBtn.textContent = '再開';
+    } else {
+      running = true;
+      pauseBtn.textContent = '一時停止';
+      intervalId = setInterval(function() {
+        remaining--;
+        updateDisplay();
+        if (remaining <= 0) finish();
+      }, 1000);
+    }
   }
 
   function finish() {
     clearInterval(intervalId);
     running = false;
-    finished = true;
     display.style.display = 'none';
     doneMsg.style.display = 'block';
-    mainBtn.disabled = true;
-    mainBtn.style.opacity = '0.4';
-    playBeep();
+    pauseBtn.disabled = true;
+    playAlarm(10, function() {
+      doneMsg.style.display = 'none';
+      remaining = initialTime;
+      startTimer();
+    });
   }
 
   function handleReset() {
     clearInterval(intervalId);
+    stopAlarm();
     running = false;
-    finished = false;
     remaining = 0;
+    initialTime = 0;
     display.style.display   = 'none';
     doneMsg.style.display   = 'none';
-    inputArea.style.display = 'block';
-    resetBtn.style.display  = 'none';
-    mainBtn.textContent     = '開始';
-    mainBtn.disabled        = false;
-    mainBtn.style.opacity   = '1';
+    btnArea.style.display   = 'none';
+    inputArea.style.display = 'flex';
+    document.getElementById('timeSelect').selectedIndex = 0;
   }
 
   function updateDisplay() {
     display.textContent = formatTime(remaining);
-    if (remaining <= 10 && remaining > 0) {
-      display.classList.add('warning');
-    } else {
-      display.classList.remove('warning');
-    }
+    display.classList.toggle('warning', remaining <= 10 && remaining > 0);
   }
 
-  function playBeep() {
-    if (!audioCtx) return;
-    // resumeしてから音を鳴らす（念のため）
-    var playNow = function() {
-      [0, 0.35, 0.7].forEach(function(delay) {
-        var osc = audioCtx.createOscillator();
-        var gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.5, audioCtx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + 0.4);
-        osc.start(audioCtx.currentTime + delay);
-        osc.stop(audioCtx.currentTime + delay + 0.4);
-      });
+  // iPhoneのRadarアラームに近い昇順4音パターンを10秒間繰り返す
+  function playAlarm(duration, onEnd) {
+    if (!audioCtx) {
+      if (onEnd) setTimeout(onEnd, duration * 1000);
+      return;
+    }
+    stopAlarm();
+
+    var doPlay = function() {
+      var now = audioCtx.currentTime;
+      var freqs = [659, 784, 988, 1175]; // E5, G5, B5, D6
+      var noteLen = 0.1;
+      var noteGap = 0.03;
+      var patternLen = (noteLen + noteGap) * freqs.length + 0.35;
+
+      for (var t = 0; t < duration; t += patternLen) {
+        freqs.forEach(function(freq, i) {
+          var noteStart = now + t + i * (noteLen + noteGap);
+          if (noteStart >= now + duration) return;
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.type = 'triangle';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, noteStart);
+          gain.gain.linearRampToValueAtTime(0.4, noteStart + 0.01);
+          gain.gain.setValueAtTime(0.4, noteStart + noteLen - 0.02);
+          gain.gain.linearRampToValueAtTime(0, noteStart + noteLen);
+          osc.start(noteStart);
+          osc.stop(noteStart + noteLen);
+          alarmNodes.push(osc);
+        });
+      }
+
+      alarmEndTimeout = setTimeout(function() {
+        stopAlarm();
+        if (onEnd) onEnd();
+      }, duration * 1000);
     };
 
     if (audioCtx.state === 'suspended') {
-      audioCtx.resume().then(playNow);
+      audioCtx.resume().then(doPlay);
     } else {
-      playNow();
+      doPlay();
     }
   }
 
-  ['inputH','inputM','inputS'].forEach(function(id) {
-    var el = document.getElementById(id);
-    el.addEventListener('change', function() {
-      var v = parseInt(el.value) || 0;
-      var max = id === 'inputH' ? 23 : 59;
-      el.value = Math.min(Math.max(v, 0), max);
-    });
-  });
+  function stopAlarm() {
+    if (alarmEndTimeout) { clearTimeout(alarmEndTimeout); alarmEndTimeout = null; }
+    alarmNodes.forEach(function(n) { try { n.stop(); n.disconnect(); } catch(e) {} });
+    alarmNodes = [];
+  }
+
+  populateSelect('sec');
+  document.addEventListener('touchstart', unlockAudio, { once: true });
+  document.addEventListener('click', unlockAudio, { once: true });
 </script>
 </body>
 </html>
