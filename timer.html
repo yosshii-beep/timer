@@ -102,7 +102,7 @@
       border-radius: 12px;
       background: #1a1a1a;
       color: #fff;
-      font-size: 32px;
+      font-size: 16px;
       font-weight: 300;
       font-variant-numeric: tabular-nums;
       cursor: pointer;
@@ -277,7 +277,9 @@
 
   function onSelectChange() {
     unlockAudio();
-    var val = parseInt(document.getElementById('timeSelect').value);
+    var select = document.getElementById('timeSelect');
+    select.style.fontSize = select.value === '' ? '16px' : '32px';
+    var val = parseInt(select.value);
     if (!val) return;
     stopAlarm();
     clearInterval(intervalId);
@@ -341,7 +343,9 @@
     doneMsg.style.display   = 'none';
     btnArea.style.display   = 'none';
     inputArea.style.display = 'flex';
-    document.getElementById('timeSelect').selectedIndex = 0;
+    var select = document.getElementById('timeSelect');
+    select.selectedIndex = 0;
+    select.style.fontSize = '16px';
   }
 
   function updateDisplay() {
