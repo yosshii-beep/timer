@@ -307,14 +307,11 @@
   function finish() {
     clearInterval(intervalId);
     running = false;
-    display.style.display = 'none';
+    playAlarm(10, null);
     doneMsg.style.display = 'block';
-    pauseBtn.disabled = true;
-    playAlarm(10, function() {
-      doneMsg.style.display = 'none';
-      remaining = initialTime;
-      startTimer();
-    });
+    setTimeout(function() { doneMsg.style.display = 'none'; }, 10000);
+    remaining = initialTime;
+    startTimer();
   }
 
   function handleReset() {
