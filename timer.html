@@ -295,6 +295,7 @@
 
   function onSelectChange() {
     unlockAudio();
+    requestWakeLock();
     var select = document.getElementById('timeSelect');
     select.style.fontSize = select.value === '' ? '16px' : '32px';
     var val = parseInt(select.value);
@@ -309,7 +310,6 @@
   function startTimer() {
     clearInterval(intervalId);
     running = true;
-    requestWakeLock();
     inputArea.style.display = 'none';
     doneMsg.style.display   = 'none';
     display.style.display   = 'block';
