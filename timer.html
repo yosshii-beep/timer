@@ -212,7 +212,7 @@
   var audioUnlocked = false;
   var alarmNodes = [];
   var alarmEndTimeout = null;
-
+  var silentLoop = null;
 
   function unlockAudio() {
     if (audioUnlocked) return;
@@ -229,6 +229,26 @@
         audioUnlocked = true;
       }
     } catch(e) {}
+  }
+
+  // タイマー動作中、無音バッファをループ再生してiOSにAudioContextを停止させない
+  function startSilentLoop() {
+    stopSilentLoop();
+    if (!audioCtx) return;
+    var frames = audioCtx.sampleRate * 2;
+    var buf = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
+    silentLoop = audioCtx.createBufferSource();
+    silentLoop.buffer = buf;
+    silentLoop.loop = true;
+    silentLoop.connect(audioCtx.destination);
+    silentLoop.start(0);
+  }
+
+  function stopSilentLoop() {
+    if (silentLoop) {
+      try { silentLoop.stop(); silentLoop.disconnect(); } catch(e) {}
+      silentLoop = null;
+    }
   }
 
   var remaining = 0;
@@ -292,6 +312,7 @@
   function startTimer() {
     clearInterval(intervalId);
     running = true;
+    startSilentLoop();
     inputArea.style.display = 'none';
     doneMsg.style.display   = 'none';
     display.style.display   = 'block';
@@ -302,21 +323,10 @@
     updateDisplay();
 
     intervalId = setInterval(function() {
-      keepAudioAlive();
       remaining--;
       updateDisplay();
       if (remaining <= 0) finish();
     }, 1000);
-  }
-
-  // iOSがAudioContextを自動停止しないよう毎秒無音バッファを再生する
-  function keepAudioAlive() {
-    if (!audioCtx || audioCtx.state !== 'running') return;
-    var buf = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
-    var src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    src.connect(audioCtx.destination);
-    src.start();
   }
 
   function handlePause() {
@@ -327,8 +337,8 @@
     } else {
       running = true;
       pauseBtn.textContent = '一時停止';
+      startSilentLoop();
       intervalId = setInterval(function() {
-        keepAudioAlive();
         remaining--;
         updateDisplay();
         if (remaining <= 0) finish();
@@ -349,6 +359,7 @@
   function handleReset() {
     clearInterval(intervalId);
     stopAlarm();
+    stopSilentLoop();
     running = false;
     remaining = 0;
     initialTime = 0;
