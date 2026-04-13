@@ -302,10 +302,21 @@
     updateDisplay();
 
     intervalId = setInterval(function() {
+      keepAudioAlive();
       remaining--;
       updateDisplay();
       if (remaining <= 0) finish();
     }, 1000);
+  }
+
+  // iOSがAudioContextを自動停止しないよう毎秒無音バッファを再生する
+  function keepAudioAlive() {
+    if (!audioCtx || audioCtx.state !== 'running') return;
+    var buf = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+    var src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    src.start();
   }
 
   function handlePause() {
@@ -317,6 +328,7 @@
       running = true;
       pauseBtn.textContent = '一時停止';
       intervalId = setInterval(function() {
+        keepAudioAlive();
         remaining--;
         updateDisplay();
         if (remaining <= 0) finish();
