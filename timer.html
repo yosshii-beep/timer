@@ -213,6 +213,24 @@
   var alarmNodes = [];
   var alarmEndTimeout = null;
 
+  var wakeLock = null;
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch(e) {}
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  }
+
+  // ページが再表示された時にタイマー動作中なら再取得
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && running) requestWakeLock();
+  });
+
   function unlockAudio() {
     if (audioUnlocked) return;
     try {
@@ -291,6 +309,7 @@
   function startTimer() {
     clearInterval(intervalId);
     running = true;
+    requestWakeLock();
     inputArea.style.display = 'none';
     doneMsg.style.display   = 'none';
     display.style.display   = 'block';
@@ -336,6 +355,7 @@
   function handleReset() {
     clearInterval(intervalId);
     stopAlarm();
+    releaseWakeLock();
     running = false;
     remaining = 0;
     initialTime = 0;
